@@ -1,9 +1,30 @@
 #include <arduinoFFT.h>
-#include <WiFi.h>
-#include <PubSubClient.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/queue.h>
+
+#define COMMUNICATION_METHOD 1  // 1 for WiFi-MQTT 2 for LoraWan-TTN
+
+#if COMMUNICATION_METHOD == 1
+
+#include <WiFi.h>
+#include <PubSubClient.h>
+
+// WiFi connection variables
+const char* ssid = "Angelo";
+const char* password = "Pompeo00";
+const char* mqttServer = "192.168.56.34";  //ip address of smartphone
+int port = 1883;
+const char* topic = "angelo/signal";
+char clientId[50];
+
+WiFiClient espClient;
+PubSubClient client(espClient);
+
+#elif COMMUNICATION_METHOD == 2
+// include Lorawan and ttn libraries and variables
+#endif
+
 
 // Signal ggeneration variables
 const uint16_t samples = 64;                 // This value MUST ALWAYS be a power of 2
@@ -33,16 +54,7 @@ QueueHandle_t transmission_queue;
 unsigned long sampleCount = 0;
 unsigned long startTime = 0;
 
-// WiFi connection variables
-const char* ssid = "Angelo";
-const char* password = "Pompeo00";
-const char* mqttServer = "192.168.56.34";  //ip address of smartphone
-int port = 1883;
-const char* topic = "angelo/signal";
-char clientId[50];
 
-WiFiClient espClient;
-PubSubClient client(espClient);
 
 
 
@@ -67,8 +79,8 @@ void setup() {
 
   analogReadResolution(12);
 
+#if COMMUNICATION_METHOD == 1
   //Connection to MQTT broker
-  
   Serial.println("WiFi connection setup");
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
@@ -77,7 +89,8 @@ void setup() {
   }
   Serial.println("WiFi connection established");
   client.setServer(mqttServer, port);
-  
+
+#endif
 
   //Find max sampling frequency v1
   //startTime = millis();
@@ -97,7 +110,6 @@ void setup() {
   xTaskCreate(generate_signal_task, "generate_signal_task", 4096, NULL, 1, NULL);
   xTaskCreate(sampling_signal_task, "sampling_signal_task", 4096, NULL, 1, NULL);
   xTaskCreate(avg_transmission_task, "avg_transmission_task", 4096, NULL, 1, NULL);
-
 }
 
 void loop() {
@@ -106,34 +118,32 @@ void loop() {
   //send_over_wifi_mqtt(2.0);
 }
 
-void avg_transmission_task(void* pvParameters){
+void avg_transmission_task(void* pvParameters) {
 
   double avg_freq;
   char msg[100];
 
-  while(1){
-    if(xQueueReceive(transmission_queue, &avg_freq, pdMS_TO_TICKS(2000))){
+  while (1) {
+    if (xQueueReceive(transmission_queue, &avg_freq, pdMS_TO_TICKS(2000))) {
 
       Serial.printf("Received message to publish on queue trasmission_queue: %.2f \n", avg_freq);
+#if COMMUNICATION_METHOD == 1
       send_over_wifi_mqtt(avg_freq);
-
+#endif
     }
-
   }
-
-
 }
 
 void sampling_signal_task(void* pvParameters) {
 
   float sum = 0;
   double sample;
-  float received_samples[WINDOW_SIZE] = { 0 };  
-  int pos = 0;                                  
+  float received_samples[WINDOW_SIZE] = { 0 };
+  int pos = 0;
   int count = 0;
 
 
-    while (1) {
+  while (1) {
     if (xQueueReceive(samples_queue, &sample, pdMS_TO_TICKS(2000))) {
 
       //find_best_sampling_freq();
@@ -169,13 +179,13 @@ void generate_signal_task(void* pvParameters) {
   TickType_t xLastWakeTime = xTaskGetTickCount();
   while (1) {
 
-    for(int i = 0; i < 50 ; i++){
-        
-        val = (double) i ;
+    for (int i = 0; i < 50; i++) {
+
+      val = (double)i;
 
 
-        xQueueSend(samples_queue, &val, (TickType_t)0);
-        vTaskDelayUntil(&xLastWakeTime,pdMS_TO_TICKS(5000)); // We use vTaskDelayUntil to get more precise delay rate 
+      xQueueSend(samples_queue, &val, (TickType_t)0);
+      vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(5000));  // We use vTaskDelayUntil to get more precise delay rate
     }
   }
 }
@@ -209,7 +219,7 @@ void find_best_sampling_freq() {
   Serial.printf("Peak Frequency: %.2f Hz\n", x);
 }
 
-
+#if COMMUNICATION_METHOD == 1
 void mqttReconnect() {
   while (!client.connected()) {
     Serial.print("Attempting MQTT connection...");
@@ -226,19 +236,18 @@ void mqttReconnect() {
     }
   }
 }
-void send_over_wifi_mqtt(double val){
+void send_over_wifi_mqtt(double val) {
 
   const int MSG_BUFFER_SIZE = 100;
   char msg[MSG_BUFFER_SIZE];
 
-  if(!client.connected()){
+  if (!client.connected()) {
     mqttReconnect();
   }
   client.loop();
 
-  snprintf(msg, MSG_BUFFER_SIZE,"%.2f",val);
-  Serial.printf("Publishing message: %.2f to topic %s \n", val,topic);
-  client.publish(topic,msg);
-
+  snprintf(msg, MSG_BUFFER_SIZE, "%.2f", val);
+  Serial.printf("Publishing message: %.2f to topic %s \n", val, topic);
+  client.publish(topic, msg);
 }
-
+#endif
