@@ -23,7 +23,7 @@ Follow these steps in order to test this project:
 ```
 git clone https://github.com/Angelo-Pio/IoT_Individual_Assignment
 ```
-* Import the *individual_assignment.ino* file in ArduinoIDE
+* Import the `individual_assignment.ino` file in ArduinoIDE
 * Connect your esp32 board, select the serial port and board type used 
 * Compile and upload the code to the board, before this step make sure to correctly set up mosquitto server and the wifi connectivity
 
@@ -57,6 +57,9 @@ Our study requires a signal source to analyze, without it we cannot procede, so 
 
 In the Arduino scketch file _Individual_assignment.ino_ you can find a function named _generate_signal_, its purpose is to generate a signal wave of the type: __2\*sin(2\*pi*3\*t)+4\*sin(2\*pi*5\*t)__.
 This signal will be used for our study and demonstration showed in the following sections.
+
+The file `individual_assignment.ino` contains all the code of the project, in order to improve compilation efficiency and make the code cleaner and easier to use to someone who wants to test it, we have added some preprocessor directives.
+These directive let you for example decide which kind of communication stack to use (either WiFi-MQTT or LoraWAN-TTN) by simply editing the MACRO `COMMUNICATION_METHOD`, set it to 1 for WiFi or 2 for LoraWAN
 
 # Finding the maximum sampling frequency
 
