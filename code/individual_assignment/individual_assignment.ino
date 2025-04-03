@@ -2,7 +2,8 @@
 // header file that includes main libraries used, configuration variables for sampling and queue handling
 #include "sampling_conf.h"
 
-#define COMMUNICATION_METHOD 0  // 1 for WiFi-MQTT 2 for LoraWan-TTN
+#define COMMUNICATION_METHOD 1  // 1 for WiFi-MQTT 2 for LoraWan-TTN
+#define LATENCY_TEST 1
 
 // !! WiFi configuraiton !!
 
@@ -25,13 +26,20 @@ char clientId[50];
 WiFiClient espClient;
 PubSubClient client(espClient);
 
+#if LATENCY_TEST == 1
+
+void callback(char* topic, byte* payload, unsigned int length);
+unsigned long lastSentTime = 0;
+#endif
+
 #elif COMMUNICATION_METHOD == 2
 
 #include "LoRaWan_APP.h"
 #include "LoRaWAN_TTN_conf.h"  // file containing all lorawan configuration variables and functions
 volatile double lora_average = 0.0;
-
 #endif
+
+
 
 
 // Use one task to sample , another to compute the avg with a sliding window  and make them communicate through a queue
@@ -57,6 +65,12 @@ void setup() {
   Serial.println("WiFi connection established");
   client.setServer(mqttServer, port);
 
+  #if LATENCY_TEST == 1
+
+  client.setCallback(callback);
+
+  #endif
+
 #elif COMMUNICATION_METHOD == 2
 
   xTaskCreate(send_over_lora_ttn, "send_over_lora_ttn", 4096, NULL, 1, NULL);
@@ -80,6 +94,9 @@ void setup() {
   xTaskCreate(generate_signal_task, "generate_signal_task", 4096, NULL, 1, NULL); // This task internally generates the signal 
   xTaskCreate(sampling_signal_task, "sampling_signal_task", 4096, NULL, 1, NULL); // This task samples the signal using a sliding window
   xTaskCreate(avg_transmission_task, "avg_transmission_task", 4096, NULL, 1, NULL); // This task is responsible to handle the transmission of the aggregate value over either wifi or lora
+
+  
+
 }
 
 void loop() {
@@ -237,6 +254,7 @@ void mqttReconnect() {
 
     if (client.connect(clientId)) {
       Serial.println(" connected");
+      client.subscribe("angelo/ack");
     } else {
       Serial.print("failed, rc=");
       Serial.print(client.state());
@@ -255,10 +273,43 @@ void send_over_wifi_mqtt(double val) {
   }
   client.loop();
 
-  snprintf(msg, MSG_BUFFER_SIZE, "%.2f", val);
+  
+
+  snprintf(msg, MSG_BUFFER_SIZE, "%.2f",val);
+
+  #if LATENCY_TEST == 1
+  lastSentTime = millis();
+
+  sprintf(msg, "%lu-%.2f", lastSentTime , val);  // Send UNIX timestamp-value
+
+  #endif
+
   Serial.printf("Publishing message: %.2f to topic %s \n", val, topic);
+  
   client.publish(topic, msg);
 }
+
+#if LATENCY_TEST == 1
+ 
+void callback(char* topic, byte* payload, unsigned int length) {
+  // Convert the payload to string and extract the timestamp
+  String payloadStr = "";
+  for (int i = 0; i < length; i++) {
+    payloadStr += (char)payload[i];
+  }
+
+  // Parse the timestamp from the payload (format: "timestamp:<timestamp_value>")
+  unsigned long receivedTimestamp = payloadStr.substring(0,payloadStr.indexOf("-") + 1).toInt();
+
+  // Calculate the round-trip latency (current time - sent timestamp)
+  unsigned long latency = millis() - receivedTimestamp;
+  Serial.print("Received message with timestamp: ");
+  Serial.println(receivedTimestamp);
+  Serial.print("Round-trip latency: ");
+  Serial.print(latency);
+  Serial.println(" ms");
+}
+#endif
 
 #elif COMMUNICATION_METHOD == 2
 

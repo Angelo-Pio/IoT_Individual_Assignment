@@ -134,3 +134,41 @@ We can plot the expected energy consumption over time like so:
 
 # Latency
 
+## WiFi
+
+We want to compute the time it takes to our system to send data to the MQTT server, in order to do so we need to know the time at which a value has been sent and the time that value was received.  
+In order to implement this we associate a timestamp with each value we send and using bash script we make mosquitto publish all the messages coming in topic angelo/signal to angelo/test.
+
+```
+mosquitto_sub -h "192.168.56.34" -t "angelo/signal" | while read line; do mosquitto_pub -h "192.168.56.34" -t "angelo/ack" -m "$line"      
+pipe while> done
+```
+with this in our code setting the macro `TEST_LATENCY` to 1 we turn on the functionalities required to get the latency.
+
+```
+Round-trip latency: 237 ms
+```
+
+## LoRaWAN
+
+Testing real world data about LoRaWAN latency is more difficult as it requires a close TTN gateway to get back data from the gateway. Unfortnuately at the time this section of project has been evaluated we did not have such gateway nearby so we provide in this section an estimation of what values we can expect.
+
+Our project is designed and implemented to work with Class A LoRaWAN devices, as explained on the TTN website:
+
+_Class A device can send an uplink message at any time. Once the uplink transmission is completed, the device opens two short receive windows for receiving downlink messages from the network. There is a delay between the end of the uplink transmission and the start of each receive window, known as RX1 Delay and RX2 Delay, respectively. If the network server does not respond during these two receive windows, the next downlink will be scheduled immediately after the next uplink transmission._
+
+Source: https://www.thethingsnetwork.org/docs/lorawan/classes/#class-a
+
+The latency in LoRaWAN communication depends on several factors, including the RX1 and RX2 delay, network server processing time, and the overall transmission conditions.
+
+For Class A devices on The Things Network (TTN), the RX1 Delay is typically 1 second, while the RX2 Delay can vary but is commonly set to 2 seconds. This means that, under ideal conditions, a downlink message in response to an uplink could arrive with a minimum latency of 1 to 2 seconds.
+
+However, real-world performance is influenced by additional delays, such as:
+
+* Network processing time, which can introduce an extra 100–500 ms delay.
+
+* Gateway backhaul delay, depending on internet latency, which can range from tens to hundreds of milliseconds.
+
+* Possible retransmissions, if the first response is missed, increasing latency further.
+
+Thus, in optimal conditions, the total round-trip time (uplink + network processing + downlink) is estimated to be 1.5 to 3 seconds. However, in cases with poor connectivity, congestion, or network-induced delays, the latency can exceed 5 seconds or more.
