@@ -61,15 +61,76 @@ The innaccuracies we found using the FFT function are probably related to how th
 # Generating the Signal Samples
 We can now move to the `individual_assignment.ino` file to continue our study process.
 Here we will change how we generate and sample the signal to better adapt this process to our study.
- 
+
 The process of generating signal samples is handled asynchronously within the `generate_signal_task`. This task simulates the creation of signal data by producing values and placing them into a queue. In this case, the task generates a simple signal pattern and sends each sample into the `samples_queue`. By using a dedicated task for signal generation, the system can continuously produce samples without blocking other operations, ensuring smooth real-time processing. The task communicates with the rest of the system through the queue, allowing for efficient data transfer between different processing steps.
 
 # Sample the Signal Over a Sliding Window
 To manage the incoming signal samples, the code employs a sliding window approach. The `sampling_signal_task` is responsible for receiving the generated signal samples from the `samples_queue`. As the signal samples arrive, they are stored in a circular buffer, and the task computes the average of the most recent samples to smooth out fluctuations. This task ensures that the system processes the data in manageable chunks and maintains an updated view of the signal’s characteristics. The sliding window technique ensures that only the most recent data is considered, keeping the computation efficient and relevant. The processed average is then passed through a separate queue, `transmission_queue`, for further handling.
 
+We can show trough the ArduinoIDE Serial Plotter how much close our average sampling is to the actual signal:
+
+![alt text](src/pic7.png)
+Value 2 is the original signal and value 1 is the average computed, the plot shows clearly how close our smapling is to the original sin wave.
+
+# Sending data
+
+The application provides two communication methods for sending aggregated values: LoRa (via TTN) and MQTT (via Wi-Fi). The communication method used can be chosen based on the application configuration, ensuring flexibility in data transmission.
+
+When the `sampling_signal_task` computes the aggregated signal value, such as the average frequency, it places the result into the `transmission_queue`. This value is then processed by the `avg_transmission_task`, which is responsible for sending the computed value to the chosen communication method, whether it's LoRa or MQTT. The task checks the current configuration via the `COMMUNICATION_METHOD` macro, determining whether to transmit via MQTT or LoRa.
 # Sending the Aggregated Value to the MQTT Broker
 We will send the aggregate value to our smartphone running mosquitto. The explanation on how to set up the mosquitto server on a Android device can be found above in the section **How to test**.
 
 Once the aggregated signal value (such as the average frequency) is computed by the `sampling_signal_task`, it is passed through the `transmission_queue` to the `avg_transmission_task`. This task is responsible for taking the averaged result and sending it to an MQTT broker via the `send_over_wifi_mqtt` function. By separating the transmission logic into a dedicated task, the system ensures that the data is transmitted without interference from the data processing pipeline. The use of queues guarantees that values are sent in the correct order and without loss, providing reliable communication to external systems or clients. The asynchronous nature of the tasks and the queues allows for non-blocking, continuous operation even under high data loads.
 
+# Sending data over LoRaWAN to TTN and a MQTT broker
+
+We will send the aggregate value to TTN and the from TTN to a MQTT broker integrated with it, check __SETUP.md__ file to see how to configure the enviroment to test this.
+
+The task `avg_transmission_task` checks the current communication method, and if LoRa is selected, it prepares the data for transmission and sends it via the `LoRaWAN.send()` function found in the `loop()` function that. This ensures that the data is sent to the TTN network in a reliable and structured way.
+The system uses LoRaWAN’s low-power features, ensuring that the device sleeps between transmissions to conserve battery life, making it ideal for long-range, low-power applications.
+
+In the file SETUP.md you can find how to connect to the MQTT server that is integrated with TTN in order to setup a mosquitto client to view this data.
+
+# Energy Consumption (Qualitative) 
+
+## Duty Cycle Estimation
+
+The duty cycle refers to the percentage of time the device is actively performing tasks (like signal generation, sampling, or transmission) versus being in a low-power state (such as sleep mode). Understanding this cycle is crucial for estimating the device's energy efficiency.
+
+For this project, the key tasks that affect the duty cycle are:
+
+1. **Signal Generation Task**: This task runs continuously, updating the sine wave values. Since it uses a delay of 1 ms (`vTaskDelay(pdMS_TO_TICKS(1))`), it's essentially active 100% of the time.
+  
+2. **Signal Sampling and Averaging Task**: This task runs with a sampling period of about 67 ms (15 Hz). It processes samples, computes moving averages, and puts the results into a queue. Given that the task is busy for most of this period, it's also active 100% of the time.
+
+3. **Transmission Task**: This task transmits data every 2 seconds. So, it’s only active about 5% of the time, based on the `2000 ms` delay. Transmission can happen over either Wi-Fi or LoRaWAN, but transmission durations are relatively short compared to the time spent idle.
+
+   - **Wi-Fi transmission** typically draws more power than LoRaWAN due to the nature of Wi-Fi communication.
+   - **LoRaWAN transmission**, while still power-hungry, is optimized for low power use and typically consumes less energy per transmission.
+
+So, the overall duty cycle is quite heavily skewed towards signal generation and sampling, with transmission contributing only a small portion of the overall active time.
+
+
+## Estimated Power Consumption
+
+On average, the esp32 consumes about **160 mA** when running tasks like signal generation and sampling in active mode. When we start transmitting data, the power consumption spikes briefly during transmission.
+
+We use 2 different transmission methods in this project resulting in 2 different expected values when evalueting energy consumption.
+
+* __Wi-Fi__ transmission increases power consumption to approximately __220-250 mA__ during active communication
+* __LoRaWAN__ transmission consumes around __120-140 mA__ during transmission, it implements a sleep cycle when not transmitting resulting in less energy consumption
+
+Thus, assuming signal generation and sampling take up most of the time, and transmission occurs once every 2 seconds, the average current consumption could be estimated as:
+
+* __Wi-Fi mode__ (transmitting 5% of the time):
+    Average current ≈ 0.95×160 mA+0.05×240 mA=166 mA0.95×160mA+0.05×240mA=__166mA__
+
+* __LoRaWAN mode__ (transmitting 5% of the time):
+    Average current ≈ 0.95×160 mA+0.05×130 mA=157 mA0.95×160mA+0.05×130mA=__157mA__
+
+We can plot the expected energy consumption over time like so:
+
+![alt text](src/pic6.png)
+
+# Latency
 

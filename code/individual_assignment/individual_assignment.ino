@@ -2,8 +2,7 @@
 // header file that includes main libraries used, configuration variables for sampling and queue handling
 #include "sampling_conf.h"
 
-#define COMMUNICATION_METHOD 2  // 1 for WiFi-MQTT 2 for LoraWan-TTN
-#define FIND_HIGHEST_SAMPLING_FREQUENCY 0 // set to 1 to activate it
+#define COMMUNICATION_METHOD 0  // 1 for WiFi-MQTT 2 for LoraWan-TTN
 
 // !! WiFi configuraiton !!
 
@@ -67,12 +66,12 @@ void setup() {
 
   //Create the queues used to exchange messages between tasks
 
-  samples_queue = xQueueCreate(WINDOW_SIZE, sizeof(double));
+  samples_queue = xQueueCreate(1, sizeof(double));
   if (samples_queue == 0) {
     printf("Failed to create queue= %p\n", samples_queue);
   }
 
-  transmission_queue = xQueueCreate(QUEUE_SIZE, sizeof(double));
+  transmission_queue = xQueueCreate(1, sizeof(double));
   if (transmission_queue == 0) {
     printf("Failed to create queue= %p\n", transmission_queue);
   }
@@ -85,9 +84,6 @@ void setup() {
 
 void loop() {
 
-#if FIND_HIGHEST_SAMPLING_FREQUENCY == 1
-find_max_freq();
-#endif
 
 
 #if COMMUNICATION_METHOD == 2
@@ -157,7 +153,6 @@ void avg_transmission_task(void* pvParameters) {
   while (1) {
     if (xQueueReceive(transmission_queue, &avg_freq, pdMS_TO_TICKS(2000))) {
 
-      Serial.printf("Received message to publish on queue trasmission_queue: %.2f \n", avg_freq);
 
 #if COMMUNICATION_METHOD == 1
 
@@ -182,7 +177,7 @@ void sampling_signal_task(void* pvParameters) {
 
 
   while (1) {
-    if (xQueueReceive(samples_queue, &sample, pdMS_TO_TICKS(2000))) {
+    if (xQueueReceive(samples_queue, &sample, (TickType_t)0)) {
 
       //find_best_sampling_freq();
       received_samples[pos] = sample;
@@ -194,8 +189,13 @@ void sampling_signal_task(void* pvParameters) {
         sum += received_samples[i];
       }
       double avgFrequency = sum / count;
-      printf("Average Frequence: %.2f Hz\n", avgFrequency);
-      xQueueSend(transmission_queue, &avgFrequency, (TickType_t)0);
+      //printf("Average Frequence: %.2f Hz\n", avgFrequency);
+      
+      Serial.print(avgFrequency);
+      Serial.print(" ");
+      Serial.println(sample);
+
+      xQueueOverwrite(transmission_queue, &avgFrequency); // used to create a circular buffer queue else we risk to block the queue or go in overflow
       vTaskDelay(pdMS_TO_TICKS(sampling_period));
     }
   }
@@ -204,20 +204,24 @@ void sampling_signal_task(void* pvParameters) {
 
 void generate_signal_task(void* pvParameters) {
   
-  double ratio1 = twoPi * signalFrequency1 / sampling_frequency;  // Fraction of cycle for first sine wave
-  double ratio2 = twoPi * signalFrequency2 / sampling_frequency;  // Fraction of cycle for second sine wave
-  
-  for (uint16_t i = 0; i < samples; i++) {
-    // Generate the composite signal: 2*sin(2*pi*3*t) + 4*sin(2*pi*5*t)
-    vReal[i] = (amplitude1 * sin(i * ratio1) / 2.0) + (amplitude2 * sin(i * ratio2) / 2.0);
-    vImag[i] = 0.0;
+  double angle1 = 0.0;
+  double angle2 = 0.0;
+ 
+ while(1){
 
-
-    Serial.printf("Sample number %d : %lf \n", i, vReal[i]);
+   double sample = (amplitude1 * sin(angle1) / 2.0) + (amplitude2 * sin(angle2) / 2.0) + 3.0;
+   
+   angle1 += ratio1;
+   angle2 += ratio2;
+   if (angle1 >= 2.0 * PI) {
+    angle1 -= 2.0 * PI;
   }
-  vTaskDelay(pdMS_TO_TICKS(1));
-
-  xQueueSend(samples_queue, &val, (TickType_t)0); 
+  if (angle2 >= 2.0 * PI) {
+    angle2 -= 2.0 * PI;
+  }
+   xQueueOverwrite(samples_queue, &sample);
+   vTaskDelay(pdMS_TO_TICKS(1));
+  }
 }
 
 
