@@ -46,12 +46,6 @@ void setup() {
 
   analogReadResolution(12);
 
-#if FIND_HIGHEST_SAMPLING_FREQUENCY == 1
-  find_max_freq(); // Find highest sampling frequency your board is able to 
-#endif
-
-
-
 #if COMMUNICATION_METHOD == 1
 
   //Connection to MQTT broker
@@ -90,6 +84,12 @@ void setup() {
 }
 
 void loop() {
+
+#if FIND_HIGHEST_SAMPLING_FREQUENCY == 1
+find_max_freq();
+#endif
+
+
 #if COMMUNICATION_METHOD == 2
   switch (deviceState) {
     case DEVICE_STATE_INIT:
@@ -203,9 +203,10 @@ void sampling_signal_task(void* pvParameters) {
 
 
 void generate_signal_task(void* pvParameters) {
-  /*
+  
   double ratio1 = twoPi * signalFrequency1 / sampling_frequency;  // Fraction of cycle for first sine wave
   double ratio2 = twoPi * signalFrequency2 / sampling_frequency;  // Fraction of cycle for second sine wave
+  
   for (uint16_t i = 0; i < samples; i++) {
     // Generate the composite signal: 2*sin(2*pi*3*t) + 4*sin(2*pi*5*t)
     vReal[i] = (amplitude1 * sin(i * ratio1) / 2.0) + (amplitude2 * sin(i * ratio2) / 2.0);
@@ -213,53 +214,13 @@ void generate_signal_task(void* pvParameters) {
 
 
     Serial.printf("Sample number %d : %lf \n", i, vReal[i]);
-  }*/
-  double val = 6.0;
-  TickType_t xLastWakeTime = xTaskGetTickCount();
-  while (1) {
-
-    for (int i = 0; i < 50; i++) {
-
-      val = (double)i;
-
-
-      xQueueSend(samples_queue, &val, (TickType_t)0);
-      vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(5000));  // We use vTaskDelayUntil to get more precise delay rate
-    }
   }
+  vTaskDelay(pdMS_TO_TICKS(1));
+
+  xQueueSend(samples_queue, &val, (TickType_t)0); 
 }
 
-#if FIND_HIGHEST_SAMPLING_FREQUENCY == 1
 
-void find_max_freq() {
-
-  int adc_value = analogRead(ADC_PIN);  // Read ADC value from specified pin
-  sampleCount++;                        // Increment the sample count
-
-  // Every second, calculate the sampling rate and print it
-  if (millis() - startTime >= 1000) {
-    unsigned long elapsedTime = millis() - startTime;
-    float frequency = sampleCount / (elapsedTime / 1000.0);
-    Serial.print("Sample Rate: ");
-    Serial.print(frequency);
-    Serial.println(" Hz");
-
-    startTime = millis();
-    sampleCount = 0;
-  }
-}
-
-#endif
-
-void find_best_sampling_freq() {
-
-  FFT.windowing(FFTWindow::Hamming, FFTDirection::Forward); /* Weigh data */
-  FFT.compute(FFTDirection::Forward);                       /* Compute FFT */
-  FFT.complexToMagnitude();
-  double x = FFT.majorPeak(); /* Compute magnitudes */
-
-  Serial.printf("Peak Frequency: %.2f Hz\n", x);
-}
 
 
 #if COMMUNICATION_METHOD == 1
