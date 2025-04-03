@@ -13,43 +13,7 @@ We will follow a step by step approach to show our work and our results.
 
 
 
-# How to test
 
-The board used for this project is an Heltec esp 32 wifi Lora v2 module, we use ArduinoIDE as IDE to compile and upload code to the board.
-Follow these steps in order to test this project: 
-
-* Install ArduinoIDE on you machine 
-* Clone the github repository on your machine 
-```
-git clone https://github.com/Angelo-Pio/IoT_Individual_Assignment
-```
-* Import the `individual_assignment.ino` file in ArduinoIDE
-* Connect your esp32 board, select the serial port and board type used 
-* Compile and upload the code to the board, before this step make sure to correctly set up mosquitto server and the wifi connectivity
-
-## Setting WiFi connectivity
-
-In the first lines of code you will find two variables: ssid and password, set these variables in order to match the credentials of you smatphone.
-This is required in order to use your smarphone as both the edge server and the WiFi source for the esp32 board.
-
-## Setting the mosquitto server on an Android device
-
-We will use our android smartphone to act as a edge server to which send messages through MQTT, the technology we will use is mosquitto, here we explain how to set up the Android device to run as a mosquitto server.
-
-* Install termux on your Android device
-* Open termux and run the following commands
-   ```
-    pgk update
-    pkg install mosquitto
-    nano .mosquitto.conf
-    ```
-* add in the mosquitto.conf file the following
-    ```
-    allow_anonymous true
-    bind_address 0.0.0.0
-    ```
-    This will make mosquitto not require authentication from the clients and enable it to receive connections that are not locally generated but come from the wifi connection
-* run **ifconfig** to get the ip address of the smartphone
 
 # Setting up the environment
 

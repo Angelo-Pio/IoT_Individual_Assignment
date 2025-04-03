@@ -1,14 +1,19 @@
-#include <arduinoFFT.h>
-#include <freertos/FreeRTOS.h>
-#include <freertos/task.h>
-#include <freertos/queue.h>
 
-#define COMMUNICATION_METHOD 1  // 1 for WiFi-MQTT 2 for LoraWan-TTN
+// header file that includes main libraries used, configuration variables for sampling and queue handling
+#include "sampling_conf.h"
+
+#define COMMUNICATION_METHOD 2  // 1 for WiFi-MQTT 2 for LoraWan-TTN
+#define FIND_HIGHEST_SAMPLING_FREQUENCY 0 // set to 1 to activate it
+
+// !! WiFi configuraiton !!
 
 #if COMMUNICATION_METHOD == 1
 
 #include <WiFi.h>
 #include <PubSubClient.h>
+
+//Function definition
+void send_over_wifi_mqtt(double val);
 
 // WiFi connection variables
 const char* ssid = "Angelo";
@@ -22,50 +27,12 @@ WiFiClient espClient;
 PubSubClient client(espClient);
 
 #elif COMMUNICATION_METHOD == 2
-// include Lorawan and ttn libraries and variables
+
+#include "LoRaWan_APP.h"
+#include "LoRaWAN_TTN_conf.h"  // file containing all lorawan configuration variables and functions
+volatile double lora_average = 0.0;
+
 #endif
-
-
-// Signal ggeneration variables
-const uint16_t samples = 64;                 // This value MUST ALWAYS be a power of 2
-const double old_samplingFrequency = 22000;  // Sampling frequency in Hz
-const double best_samplingFrequency = NULL;  // Sampling frequency in Hz
-const double signalFrequency1 = 3;           // Frequency of first sine wave (3 Hz)
-const double signalFrequency2 = 5;           // Frequency of second sine wave (5 Hz)
-const double amplitude1 = 2;                 // Amplitude of first sine wave
-const double amplitude2 = 4;                 // Amplitude of second sine wave
-
-// FFT variables
-double vReal[samples];
-double vImag[samples];
-ArduinoFFT<double> FFT = ArduinoFFT<double>(vReal, vImag, samples, old_samplingFrequency);
-
-
-// Queue used to continous sampling and rolling average and another to send info to edge server
-#define WINDOW_SIZE 5
-#define QUEUE_SIZE 4
-QueueHandle_t samples_queue;
-QueueHandle_t transmission_queue;
-
-
-// Variables to find max frequency
-#define ADC_PIN 38
-#define SAMPLE_RATE 1000000
-unsigned long sampleCount = 0;
-unsigned long startTime = 0;
-
-
-
-
-
-void find_max_freq();
-void find_best_sampling_freq();
-void mqttReconnect();
-void send_over_wifi_mqtt(double val);
-void generate_signal_task(void* pvParameters);
-void sampling_signal_task(void* pvParameters);
-void avg_transmission_task(void* pvParameters);
-
 
 
 // Use one task to sample , another to compute the avg with a sliding window  and make them communicate through a queue
@@ -79,7 +46,14 @@ void setup() {
 
   analogReadResolution(12);
 
+#if FIND_HIGHEST_SAMPLING_FREQUENCY == 1
+  find_max_freq(); // Find highest sampling frequency your board is able to 
+#endif
+
+
+
 #if COMMUNICATION_METHOD == 1
+
   //Connection to MQTT broker
   Serial.println("WiFi connection setup");
   WiFi.begin(ssid, password);
@@ -90,12 +64,14 @@ void setup() {
   Serial.println("WiFi connection established");
   client.setServer(mqttServer, port);
 
+#elif COMMUNICATION_METHOD == 2
+
+  xTaskCreate(send_over_lora_ttn, "send_over_lora_ttn", 4096, NULL, 1, NULL);
+
+
 #endif
 
-  //Find max sampling frequency v1
-  //startTime = millis();
-
-  //Generate and sample the signal
+  //Create the queues used to exchange messages between tasks
 
   samples_queue = xQueueCreate(WINDOW_SIZE, sizeof(double));
   if (samples_queue == 0) {
@@ -107,15 +83,70 @@ void setup() {
     printf("Failed to create queue= %p\n", transmission_queue);
   }
 
-  xTaskCreate(generate_signal_task, "generate_signal_task", 4096, NULL, 1, NULL);
-  xTaskCreate(sampling_signal_task, "sampling_signal_task", 4096, NULL, 1, NULL);
-  xTaskCreate(avg_transmission_task, "avg_transmission_task", 4096, NULL, 1, NULL);
+  // Create 3 tasks
+  xTaskCreate(generate_signal_task, "generate_signal_task", 4096, NULL, 1, NULL); // This task internally generates the signal 
+  xTaskCreate(sampling_signal_task, "sampling_signal_task", 4096, NULL, 1, NULL); // This task samples the signal using a sliding window
+  xTaskCreate(avg_transmission_task, "avg_transmission_task", 4096, NULL, 1, NULL); // This task is responsible to handle the transmission of the aggregate value over either wifi or lora
 }
 
 void loop() {
-  //find_max_freq();
+#if COMMUNICATION_METHOD == 2
+  switch (deviceState) {
+    case DEVICE_STATE_INIT:
+      {
+#if (LORAWAN_DEVEUI_AUTO)
+        LoRaWAN.generateDeveuiByChipID();
+#endif
+        LoRaWAN.init(loraWanClass, loraWanRegion);
 
-  //send_over_wifi_mqtt(2.0);
+        // Default data rate DR3 for EU868
+        LoRaWAN.setDefaultDR(3);
+
+        deviceState = DEVICE_STATE_JOIN;
+        break;
+      }
+
+    case DEVICE_STATE_JOIN:
+      {
+        // OTAA in our case -> overTheAirActivation = true;
+        LoRaWAN.join();
+        break;
+      }
+
+    case DEVICE_STATE_SEND:
+      {
+        prepareTxFrame(appPort);
+        LoRaWAN.send();
+
+        deviceState = DEVICE_STATE_CYCLE;
+        break;
+      }
+
+    case DEVICE_STATE_CYCLE:
+      {
+        // Next uplink in appTxDutyCycle plus random offset
+        txDutyCycleTime =
+          appTxDutyCycle + randr(-APP_TX_DUTYCYCLE_RND, APP_TX_DUTYCYCLE_RND);  //defaulted by Heltec library to 1000ms
+
+        LoRaWAN.cycle(txDutyCycleTime);
+        deviceState = DEVICE_STATE_SLEEP;
+        break;
+      }
+
+    case DEVICE_STATE_SLEEP:
+      {
+        // Sleep radio until next cycle
+        LoRaWAN.sleep(loraWanClass);
+        break;
+      }
+
+    default:
+      {
+        deviceState = DEVICE_STATE_INIT;  // Reset to init state in case of error or disconnection
+        break;
+      }
+  }
+#endif
 }
 
 void avg_transmission_task(void* pvParameters) {
@@ -127,8 +158,15 @@ void avg_transmission_task(void* pvParameters) {
     if (xQueueReceive(transmission_queue, &avg_freq, pdMS_TO_TICKS(2000))) {
 
       Serial.printf("Received message to publish on queue trasmission_queue: %.2f \n", avg_freq);
+
 #if COMMUNICATION_METHOD == 1
+
       send_over_wifi_mqtt(avg_freq);
+
+#elif COMMUNICATION_METHOD == 2
+
+      lora_average = avg_freq;
+
 #endif
     }
   }
@@ -158,6 +196,7 @@ void sampling_signal_task(void* pvParameters) {
       double avgFrequency = sum / count;
       printf("Average Frequence: %.2f Hz\n", avgFrequency);
       xQueueSend(transmission_queue, &avgFrequency, (TickType_t)0);
+      vTaskDelay(pdMS_TO_TICKS(sampling_period));
     }
   }
 }
@@ -165,8 +204,8 @@ void sampling_signal_task(void* pvParameters) {
 
 void generate_signal_task(void* pvParameters) {
   /*
-  double ratio1 = twoPi * signalFrequency1 / old_samplingFrequency;  // Fraction of cycle for first sine wave
-  double ratio2 = twoPi * signalFrequency2 / old_samplingFrequency;  // Fraction of cycle for second sine wave
+  double ratio1 = twoPi * signalFrequency1 / sampling_frequency;  // Fraction of cycle for first sine wave
+  double ratio2 = twoPi * signalFrequency2 / sampling_frequency;  // Fraction of cycle for second sine wave
   for (uint16_t i = 0; i < samples; i++) {
     // Generate the composite signal: 2*sin(2*pi*3*t) + 4*sin(2*pi*5*t)
     vReal[i] = (amplitude1 * sin(i * ratio1) / 2.0) + (amplitude2 * sin(i * ratio2) / 2.0);
@@ -190,6 +229,7 @@ void generate_signal_task(void* pvParameters) {
   }
 }
 
+#if FIND_HIGHEST_SAMPLING_FREQUENCY == 1
 
 void find_max_freq() {
 
@@ -209,6 +249,8 @@ void find_max_freq() {
   }
 }
 
+#endif
+
 void find_best_sampling_freq() {
 
   FFT.windowing(FFTWindow::Hamming, FFTDirection::Forward); /* Weigh data */
@@ -219,7 +261,9 @@ void find_best_sampling_freq() {
   Serial.printf("Peak Frequency: %.2f Hz\n", x);
 }
 
+
 #if COMMUNICATION_METHOD == 1
+
 void mqttReconnect() {
   while (!client.connected()) {
     Serial.print("Attempting MQTT connection...");
@@ -249,5 +293,16 @@ void send_over_wifi_mqtt(double val) {
   snprintf(msg, MSG_BUFFER_SIZE, "%.2f", val);
   Serial.printf("Publishing message: %.2f to topic %s \n", val, topic);
   client.publish(topic, msg);
+}
+
+#elif COMMUNICATION_METHOD == 2
+
+static void prepareTxFrame(uint8_t port) {
+  // Send rolling average as a 4-byte float
+  float val = (float)lora_average;
+
+  // The Heltec library gives us global appData[] & appDataSize to be set!
+  memcpy(appData, &val, sizeof(float));
+  appDataSize = sizeof(float);
 }
 #endif
