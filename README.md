@@ -12,11 +12,11 @@ We will follow a step by step approach to show our work and our results.
 
 # Setting up the environment
 
-Our study requires a signal source to analyze, without it we cannot procede, so here we will show the technologies used and how the signal is locally generated, the signal we will generate ahs the following form: __2\*sin(2\*pi*3\*t)+4\*sin(2\*pi*5\*t)__.
+Our study requires a signal source to analyze, without it we cannot procede, so here we will show the technologies used and how the signal is locally generated, the signal we will generate with the following form: __2\*sin(2\*pi*3\*t)+4\*sin(2\*pi*5\*t)__.
 
 The file `individual_assignment.ino` contains all the code of the project, in order to improve compilation efficiency and make the code cleaner and easier to use to someone who wants to test it, we have added some preprocessor directives.
 
-These directive let you for example decide which kind of communication stack to use (either WiFi-MQTT or LoraWAN-TTN) by simply editing the MACRO `COMMUNICATION_METHOD`, set it to 1 for WiFi or 2 for LoraWAN.
+These directives let you, for example decide which kind of communication stack to use (either WiFi-MQTT or LoraWAN-TTN) by simply editing the MACRO `COMMUNICATION_METHOD`, set it to 1 for WiFi or 2 for LoraWAN.
 
 There is another file called `sampling_frequency.ino` in which we do some tests to find the maximum sampling frequency the board is capable of and the best sampling frequency for the signal we generate.
 
@@ -24,7 +24,7 @@ There is another file called `sampling_frequency.ino` in which we do some tests 
 
 
 We want to find out which is the real maximum sampling frequency we can achieve using the ADC pin of our esp32 board, the sampling frequency is measured in Hz. 
-The function _find\_max\_freq()_ is called in the _loop()_ so it is in a infinite loop where it reads a value from an analog pin enabled for ADC and increases a counter, after 1 second the counter is printed on the serial output and its value is reset to 0, giving us the number of samples taken in one seconds, hence the sampling frequency.
+The function _find\_max\_freq()_ is called in the _loop()_ so it is in a infinite loop where it reads a value from an analog pin enabled for ADC and increases a counter, after 1 second the counter is printed on the serial output and its value is reset to 0, giving us the number of samples taken in one second, hence the sampling frequency.
 The output of this function is the following:
 
 ```
@@ -54,8 +54,7 @@ Peak Frequency: 5.01 Hz
 
 Which is exactly what we expected, knowing this we can set the sampling frequency at 10Hz following the sampling theorem, to be sure we can set it to slightly larger value like 15 Hz.
 
-The innaccuracies we found using the FFT function are probably related to how the library works and values of sampling frequency and singal frequecy too distant are not well handled by it.
-
+The innaccuracies we found using the FFT function are probably related to how the library works, the problems seems to rely on distance between the values of sampling frequency and sampling frequency.
 
 
 # Generating the Signal Samples
