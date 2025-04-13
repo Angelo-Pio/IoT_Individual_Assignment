@@ -4,6 +4,7 @@
 #include <freertos/task.h>
 #include <freertos/queue.h>
 #include <arduinoFFT.h>
+#include "esp_sleep.h"
 
 //Function declatration
 void mqttReconnect();

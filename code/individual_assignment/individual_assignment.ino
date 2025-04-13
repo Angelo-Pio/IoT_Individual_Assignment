@@ -4,6 +4,7 @@
 
 #define COMMUNICATION_METHOD 0  // 1 for WiFi-MQTT 2 for LoraWan-TTN
 #define LATENCY_TEST 1
+#define POWER_MEASURE 1  // Enable power measurement feature
 
 // !! WiFi configuraiton !!
 
@@ -137,6 +138,27 @@ void sampling_signal_task(void* pvParameters) {
       if (xQueueSend(transmission_queue, &avgFrequency, 0) != pdPASS) {
         Serial.println("transmission_queue full — avg frequency dropped");
       }
+
+      #if POWER_MEASURE
+
+      static int powerSampleCount = 0;
+      const int MAX_SAMPLES_BEFORE_SLEEP = 100;  // Tune this as needed
+      const int SLEEP_DURATION_US = 5e6;         // 5 seconds (in microseconds)
+
+      powerSampleCount++;
+
+      if (powerSampleCount >= MAX_SAMPLES_BEFORE_SLEEP) {
+        Serial.println("Entering deep sleep for power measurement...");
+
+        // Configure wake-up timer
+        esp_sleep_enable_timer_wakeup(SLEEP_DURATION_US);
+
+        Serial.flush();  // Ensure all logs are printed before sleeping
+        esp_deep_sleep_start();
+      }
+      
+      #endif
+
       
     }
   }
