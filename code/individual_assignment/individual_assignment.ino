@@ -36,7 +36,6 @@ unsigned long lastSentTime = 0;
 
 #include "LoRaWan_APP.h"
 #include "LoRaWAN_TTN_conf.h"  // file containing all lorawan configuration variables and functions
-volatile double lora_average = 0.0;
 #endif
 
 
@@ -93,15 +92,17 @@ void setup() {
   // Create 3 tasks
   xTaskCreate(generate_signal_task, "generate_signal_task", 4096, NULL, 1, NULL); // This task internally generates the signal 
   xTaskCreate(sampling_signal_task, "sampling_signal_task", 4096, NULL, 1, NULL); // This task samples the signal using a sliding window
-  xTaskCreate(avg_transmission_task, "avg_transmission_task", 4096, NULL, 1, NULL); // This task is responsible to handle the transmission of the aggregate value over either wifi or lora
 
+  #if COMMUNICATION_METHOD == 1
+  xTaskCreate(wifi_transmission_task, "wifi_transmission_task", 4096, NULL, 1, NULL); // This task is responsible to handle the transmission of the aggregate value over either wifi or lora
+  #elif COMMUNICATION_METHOD == 2
+  xTaskCreate(lorawan_transmission_task, "lorawan_transmission_task", 4096, NULL, 1, NULL);
+  #endif
   
 
 }
 
 void loop() {
-
-
 
 #if COMMUNICATION_METHOD == 2
   switch (deviceState) {
@@ -162,28 +163,14 @@ void loop() {
 #endif
 }
 
-void avg_transmission_task(void* pvParameters) {
-
-  double avg_freq;
-  char msg[100];
-
-  while (1) {
-    if (xQueueReceive(transmission_queue, &avg_freq, pdMS_TO_TICKS(2000))) {
+// TASKS
 
 
-#if COMMUNICATION_METHOD == 1
 
-      send_over_wifi_mqtt(avg_freq);
 
-#elif COMMUNICATION_METHOD == 2
 
-      lora_average = avg_freq;
 
-#endif
-    }
-  }
-}
-
+//Computes the rolling average of the generated signal, samples are taken from a queue
 void sampling_signal_task(void* pvParameters) {
 
   float sum = 0;
@@ -194,7 +181,7 @@ void sampling_signal_task(void* pvParameters) {
 
 
   while (1) {
-    if (xQueueReceive(samples_queue, &sample, (TickType_t)0)) {
+    if (xQueueReceive(samples_queue, &sample,  pdMS_TO_TICKS(sampling_period)) {
 
       //find_best_sampling_freq();
       received_samples[pos] = sample;
@@ -213,12 +200,12 @@ void sampling_signal_task(void* pvParameters) {
       Serial.println(sample);
 
       xQueueOverwrite(transmission_queue, &avgFrequency); // used to create a circular buffer queue else we risk to block the queue or go in overflow
-      vTaskDelay(pdMS_TO_TICKS(sampling_period));
     }
   }
 }
 
 
+//Genrates the signal to analyse
 void generate_signal_task(void* pvParameters) {
   
   double angle1 = 0.0;
@@ -237,14 +224,30 @@ void generate_signal_task(void* pvParameters) {
     angle2 -= 2.0 * PI;
   }
    xQueueOverwrite(samples_queue, &sample);
-   vTaskDelay(pdMS_TO_TICKS(1));
+   vTaskDelay(pdMS_TO_TICKS(1000/SIGNAL_RATE));
   }
 }
 
 
 
-
 #if COMMUNICATION_METHOD == 1
+
+//Transmits the rolling average through the communication method specified in COMMUNITCATION_METHOD
+void wifi_transmission_task(void* pvParameters) {
+
+  double avg_freq;
+  char msg[100];
+
+  while (1) {
+    if (xQueueReceive(transmission_queue, &avg_freq, pdMS_TO_TICKS(2000))) {
+
+      send_over_wifi_mqtt(avg_freq);
+
+    }
+  }
+}
+
+
 
 void mqttReconnect() {
   while (!client.connected()) {
@@ -313,12 +316,67 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
 #elif COMMUNICATION_METHOD == 2
 
-static void prepareTxFrame(uint8_t port) {
-  // Send rolling average as a 4-byte float
-  float val = (float)lora_average;
-
-  // The Heltec library gives us global appData[] & appDataSize to be set!
+static void prepareTxFrame(uint8_t port, float val) {
   memcpy(appData, &val, sizeof(float));
   appDataSize = sizeof(float);
 }
+
+void lorawan_transmission_task(void* pvParameters) {
+  float last_avg_value = 0.0;
+
+  while (1) {
+    // Try to receive a new average from queue if available (non-blocking)
+    xQueueReceive(transmission_queue, &last_avg_value, 0);
+
+    switch (deviceState) {
+      case DEVICE_STATE_INIT:
+      {
+  #if (LORAWAN_DEVEUI_AUTO)
+        LoRaWAN.generateDeveuiByChipID();
+  #endif
+        LoRaWAN.init(loraWanClass, loraWanRegion);
+        LoRaWAN.setDefaultDR(3);
+        deviceState = DEVICE_STATE_JOIN;
+        break;
+      }
+
+      case DEVICE_STATE_JOIN:
+      {
+        LoRaWAN.join();
+        break;
+      }
+
+      case DEVICE_STATE_SEND:
+      {
+        prepareTxFrame(appPort, last_avg_value);
+        LoRaWAN.send();
+        deviceState = DEVICE_STATE_CYCLE;
+        break;
+      }
+
+      case DEVICE_STATE_CYCLE:
+      {
+        txDutyCycleTime = appTxDutyCycle + randr(-APP_TX_DUTYCYCLE_RND, APP_TX_DUTYCYCLE_RND);
+        LoRaWAN.cycle(txDutyCycleTime);
+        deviceState = DEVICE_STATE_SLEEP;
+        break;
+      }
+
+      case DEVICE_STATE_SLEEP:
+      {
+        LoRaWAN.sleep(loraWanClass);
+        break;
+      }
+
+      default:
+      {
+        deviceState = DEVICE_STATE_INIT;
+        break;
+      }
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(100));  // Small delay to prevent tight loop
+  }
+}
+
 #endif
