@@ -77,17 +77,18 @@ void setup() {
 
 #endif
 
-  //Create the queues used to exchange messages between tasks
+  // Create the queues used to exchange messages between tasks
 
-  samples_queue = xQueueCreate(1, sizeof(double));
+  samples_queue = xQueueCreate(QUEUE_SIZE, sizeof(double));
   if (samples_queue == 0) {
-    printf("Failed to create queue= %p\n", samples_queue);
+    printf("Failed to create samples_queue = %p\n", samples_queue);
   }
 
-  transmission_queue = xQueueCreate(1, sizeof(double));
+  transmission_queue = xQueueCreate(QUEUE_SIZE, sizeof(double));
   if (transmission_queue == 0) {
-    printf("Failed to create queue= %p\n", transmission_queue);
+    printf("Failed to create transmission_queue = %p\n", transmission_queue);
   }
+
 
   // Create 3 tasks
   xTaskCreate(generate_signal_task, "generate_signal_task", 4096, NULL, 1, NULL); // This task internally generates the signal 
@@ -198,8 +199,11 @@ void sampling_signal_task(void* pvParameters) {
       Serial.print(avgFrequency);
       Serial.print(" ");
       Serial.println(sample);
-
-      xQueueOverwrite(transmission_queue, &avgFrequency); // used to create a circular buffer queue else we risk to block the queue or go in overflow
+      
+      if (xQueueSend(transmission_queue, &avgFrequency, 0) != pdPASS) {
+        Serial.println("transmission_queue full — avg frequency dropped");
+      }
+      
     }
   }
 }
@@ -223,7 +227,10 @@ void generate_signal_task(void* pvParameters) {
   if (angle2 >= 2.0 * PI) {
     angle2 -= 2.0 * PI;
   }
-   xQueueOverwrite(samples_queue, &sample);
+    if (xQueueSend(samples_queue, &sample, 0) != pdPASS) {
+      Serial.println("samples_queue full — signal dropped");
+    }
+  
    vTaskDelay(pdMS_TO_TICKS(1000/SIGNAL_RATE));
   }
 }
