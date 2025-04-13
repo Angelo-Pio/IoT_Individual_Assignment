@@ -52,33 +52,7 @@ void setup() {
 
   analogReadResolution(12);
 
-#if COMMUNICATION_METHOD == 1
-
-  //Connection to MQTT broker
-  Serial.println("WiFi connection setup");
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(1000);
-    Serial.println(".");
-  }
-  Serial.println("WiFi connection established");
-  client.setServer(mqttServer, port);
-
-  #if LATENCY_TEST == 1
-
-  client.setCallback(callback);
-
-  #endif
-
-#elif COMMUNICATION_METHOD == 2
-
-  xTaskCreate(send_over_lora_ttn, "send_over_lora_ttn", 4096, NULL, 1, NULL);
-
-
-#endif
-
   // Create the queues used to exchange messages between tasks
-
   samples_queue = xQueueCreate(QUEUE_SIZE, sizeof(double));
   if (samples_queue == 0) {
     printf("Failed to create samples_queue = %p\n", samples_queue);
@@ -90,12 +64,29 @@ void setup() {
   }
 
 
-  // Create 3 tasks
+  // Create the tasks
   xTaskCreate(generate_signal_task, "generate_signal_task", 4096, NULL, 1, NULL); // This task internally generates the signal 
   xTaskCreate(sampling_signal_task, "sampling_signal_task", 4096, NULL, 1, NULL); // This task samples the signal using a sliding window
 
   #if COMMUNICATION_METHOD == 1
   xTaskCreate(wifi_transmission_task, "wifi_transmission_task", 4096, NULL, 1, NULL); // This task is responsible to handle the transmission of the aggregate value over either wifi or lora
+  
+   //Connection to MQTT broker
+   Serial.println("WiFi connection setup");
+   WiFi.begin(ssid, password);
+   while (WiFi.status() != WL_CONNECTED) {
+     delay(1000);
+     Serial.println(".");
+   }
+   Serial.println("WiFi connection established");
+   client.setServer(mqttServer, port);
+ 
+   #if LATENCY_TEST == 1
+ 
+   client.setCallback(callback);
+ 
+   #endif
+  
   #elif COMMUNICATION_METHOD == 2
   xTaskCreate(lorawan_transmission_task, "lorawan_transmission_task", 4096, NULL, 1, NULL);
   #endif
@@ -103,73 +94,8 @@ void setup() {
 
 }
 
-void loop() {
-
-#if COMMUNICATION_METHOD == 2
-  switch (deviceState) {
-    case DEVICE_STATE_INIT:
-      {
-#if (LORAWAN_DEVEUI_AUTO)
-        LoRaWAN.generateDeveuiByChipID();
-#endif
-        LoRaWAN.init(loraWanClass, loraWanRegion);
-
-        // Default data rate DR3 for EU868
-        LoRaWAN.setDefaultDR(3);
-
-        deviceState = DEVICE_STATE_JOIN;
-        break;
-      }
-
-    case DEVICE_STATE_JOIN:
-      {
-        // OTAA in our case -> overTheAirActivation = true;
-        LoRaWAN.join();
-        break;
-      }
-
-    case DEVICE_STATE_SEND:
-      {
-        prepareTxFrame(appPort);
-        LoRaWAN.send();
-
-        deviceState = DEVICE_STATE_CYCLE;
-        break;
-      }
-
-    case DEVICE_STATE_CYCLE:
-      {
-        // Next uplink in appTxDutyCycle plus random offset
-        txDutyCycleTime =
-          appTxDutyCycle + randr(-APP_TX_DUTYCYCLE_RND, APP_TX_DUTYCYCLE_RND);  //defaulted by Heltec library to 1000ms
-
-        LoRaWAN.cycle(txDutyCycleTime);
-        deviceState = DEVICE_STATE_SLEEP;
-        break;
-      }
-
-    case DEVICE_STATE_SLEEP:
-      {
-        // Sleep radio until next cycle
-        LoRaWAN.sleep(loraWanClass);
-        break;
-      }
-
-    default:
-      {
-        deviceState = DEVICE_STATE_INIT;  // Reset to init state in case of error or disconnection
-        break;
-      }
-  }
-#endif
-}
-
+void loop() {}
 // TASKS
-
-
-
-
-
 
 //Computes the rolling average of the generated signal, samples are taken from a queue
 void sampling_signal_task(void* pvParameters) {
