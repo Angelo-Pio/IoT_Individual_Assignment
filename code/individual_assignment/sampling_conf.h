@@ -14,15 +14,15 @@ void find_max_freq();
 
 // Signal ggeneration variables
 const uint16_t samples = 64;                 // This value MUST ALWAYS be a power of 2
-const double sampling_frequency = 15;  // Sampling frequency in Hz
+double sampling_frequency = 22000;           // Sampling frequency in Hz
 const double twoPi = 6.28;
-const double signalFrequency1 = 3;           // Frequency of first sine wave (3 Hz)
-const double signalFrequency2 = 5;           // Frequency of second sine wave (5 Hz)
+const double signalFrequency1 = 150;           // Frequency of first sine wave (3 Hz)
+const double signalFrequency2 = 400;           // Frequency of second sine wave (5 Hz)
 const double amplitude1 = 2;                 // Amplitude of first sine wave
 const double amplitude2 = 4;                 // Amplitude of second sine wave
 const double SIGNAL_RATE 1000
 
-static const int sampling_period = (int)(1000.0 / sampling_frequency + 0.5); 
+int sampling_period = (int)(1000.0 / sampling_frequency + 0.5); 
 
 double ratio1 = twoPi * signalFrequency1 / 5000;  // Fraction of cycle for first sine wave
 double ratio2 = twoPi * signalFrequency2 / 5000;  // Fraction of cycle for second sine wave

@@ -36,6 +36,7 @@ unsigned long lastSentTime = 0;
 
 #include "LoRaWan_APP.h"
 #include "LoRaWAN_TTN_conf.h"  // file containing all lorawan configuration variables and functions
+
 #endif
 
 
@@ -100,6 +101,13 @@ void loop() {}
 //Computes the rolling average of the generated signal, samples are taken from a queue
 void sampling_signal_task(void* pvParameters) {
 
+  static bool adaptive_sampling_done = false;
+
+  if (!adaptive_sampling_done) {
+    findOptimalSamplingFrequency();
+    adaptive_sampling_done = true;
+  }
+
   float sum = 0;
   double sample;
   float received_samples[WINDOW_SIZE] = { 0 };
@@ -134,8 +142,7 @@ void sampling_signal_task(void* pvParameters) {
   }
 }
 
-
-//Genrates the signal to analyse
+//Generates the signal to analyse
 void generate_signal_task(void* pvParameters) {
   
   double angle1 = 0.0;
@@ -160,7 +167,6 @@ void generate_signal_task(void* pvParameters) {
    vTaskDelay(pdMS_TO_TICKS(1000/SIGNAL_RATE));
   }
 }
-
 
 
 #if COMMUNICATION_METHOD == 1
@@ -313,3 +319,47 @@ void lorawan_transmission_task(void* pvParameters) {
 }
 
 #endif
+
+// Auxiliary functions
+
+// Finds optimal sampling frequeuncy
+
+void findOptimalSamplingFrequency() {
+  double sample;
+  int collected = 0;
+
+  // Collect samples from generated signal queue
+  while (collected < samples) {
+    if (xQueueReceive(samples_queue, &sample, pdMS_TO_TICKS(100))) {
+      vReal[collected] = sample;
+      vImag[collected] = 0;
+      collected++;
+    }
+  }
+
+  FFT.windowing(FFTWindow::Hamming, FFTDirection::Forward);
+  FFT.compute(FFTDirection::Forward);
+  FFT.complexToMagnitude();
+
+  // Find peak frequency
+  double peak = 0.0;
+  int index = 0;
+  for (int i = 1; i < samples / 2; i++) {
+    if (vReal[i] > peak) {
+      peak = vReal[i];
+      index = i;
+    }
+  }
+
+  double peakFrequency = (index * sampling_frequency) / samples;
+
+  // Update frequency and period
+  sampling_frequency = (2 * peakFrequency) + 5;
+  sampling_period = (int)(1000.0 / sampling_frequency + 0.5);
+
+  Serial.print("Adaptive sampling frequency set to: ");
+  Serial.print(sampling_frequency);
+  Serial.print(" Hz, period = ");
+  Serial.print(sampling_period);
+  Serial.println(" ms");
+}
