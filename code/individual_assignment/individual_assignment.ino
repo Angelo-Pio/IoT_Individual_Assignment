@@ -2,7 +2,7 @@
 // header file that includes main libraries used, configuration variables for sampling and queue handling
 #include "sampling_conf.h"
 
-#define COMMUNICATION_METHOD 1  // 1 for WiFi-MQTT 2 for LoraWan-TTN
+#define COMMUNICATION_METHOD 0  // 1 for WiFi-MQTT 2 for LoraWan-TTN
 #define LATENCY_TEST 1
 
 // !! WiFi configuraiton !!
@@ -116,7 +116,7 @@ void sampling_signal_task(void* pvParameters) {
 
 
   while (1) {
-    if (xQueueReceive(samples_queue, &sample,  pdMS_TO_TICKS(sampling_period)) {
+    if (xQueueReceive(samples_queue, &sample,  pdMS_TO_TICKS(sampling_period) )) {
 
       //find_best_sampling_freq();
       received_samples[pos] = sample;
@@ -164,7 +164,7 @@ void generate_signal_task(void* pvParameters) {
       Serial.println("samples_queue full — signal dropped");
     }
   
-   vTaskDelay(pdMS_TO_TICKS(1000/SIGNAL_RATE));
+   vTaskDelay(pdMS_TO_TICKS(1000/generationSignalRate));
   }
 }
 
@@ -355,8 +355,8 @@ void findOptimalSamplingFrequency() {
 
   // Update frequency and period
   sampling_frequency = (2 * peakFrequency) + 5;
-  sampling_period = (int)(1000.0 / sampling_frequency + 0.5);
-
+  sampling_period = (1000.0 / sampling_frequency + 0.5);
+  Serial.printf("Peak frequency found is : %lf \n", peakFrequency);
   Serial.print("Adaptive sampling frequency set to: ");
   Serial.print(sampling_frequency);
   Serial.print(" Hz, period = ");
