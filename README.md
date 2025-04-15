@@ -157,17 +157,24 @@ We can plot the expected energy consumption over time like so:
 
 ## Measured power consumption
 
-To analyze the energy efficiency of our ESP32-based system, we enabled a power-saving mode through the `POWER_MEASURE` directive. When set to 1, the system collects a set number of samples and then enters deep sleep for a fixed period, significantly reducing its power draw during idle times. \
-This behavior is particularly relevant when the FFT-derived sampling frequency is high, and real-time deep sleep between samples is not feasible. Instead, we opt for periodic sampling followed by power-down phases to demonstrate measurable savings in energy.
+To analyze the energy efficiency of our ESP32-based system, we enabled a power-saving mode through the `POWER_MEASURE` directive. When set to 1, the system enters deep sleep for a fixed period of time after sending data through the choses communication method, this helps us to measure how much power it consumes. \
+This behavior is particularly relevant when the FFT-derived sampling frequency is high, and real-time deep sleep between samples is not feasible. Instead, we opt for periodic sampling followed by power-down phases to demonstrate how the system behaves from the energy consumption POV.
 
-Power consumption was monitored using a secondary ESP32 board paired with an INA219 current sensor. This monitoring board treated the primary ESP32 as its load, allowing us to log voltage and current values throughout the operational cycle, including active and deep sleep states. The collected data clearly shows a significant drop in current draw when the system enters deep sleep, validating the effectiveness of our approach.
-
+Power consumption was monitored using a secondary ESP32 board paired with an INA219 current sensor. This monitoring board treated the primary ESP32 as its load, allowing us to log voltage and current values throughout the operational cycle, including active and deep sleep states. \
+The collected data clearly shows a significant drop in current draw when the system enters deep sleep, validating the effectiveness of our approach.\
 The results of this measurement can be shown in this figure:
 
 ![alt text](src/pic9.png)
 
-The graph illustrates the system’s power profile over time, with marked differences between processing periods and sleep intervals. Average current values during active mode and deep sleep were approximately [X] mA and [Y] mA, respectively, leading to an estimated energy saving of [Z]% compared to continuous operation.
-Active mode are characterized of a power consumption peak of [K] W, this with no WiFi transmission enabled, when WiFi is enabled we have short peaks of [K] W during active mode, this shows clearly how WiFi is not a protocol designed to be energy efficient.
+The graph illustrates the system’s power profile over time, with marked differences between processing periods and sleep intervals. Average current values during active mode and deep sleep were approximately [X] mA and [Y] mA, respectively.\
+We now focus on the values we get during a normal operation where samples are generated, analyzed and finally sent over WiFi.
+Active mode are characterized of a power consumption peak of [K] W, this peak is where we expect to be, at the end of the work cycle when data is transmitted, WiFi is an energy demanding protocols so this is result falls in our estimation.
+These are the values we have registered after the sampling frequency has been optimized, let's see what happens if we use the original maximum frequeuncy: \
+
+![alt text](src/pic10.png)
+
+
+
 
 # Latency
 
