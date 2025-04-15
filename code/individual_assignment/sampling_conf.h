@@ -39,7 +39,7 @@ unsigned long startTime = 0;
 
 // Queue used to continous sampling and rolling average and another to send info to edge server
 #define WINDOW_SIZE 5
-#define QUEUE_SIZE 10
+#define QUEUE_SIZE 15
 QueueHandle_t samples_queue;
 QueueHandle_t transmission_queue;
 

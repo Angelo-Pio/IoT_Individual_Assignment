@@ -2,8 +2,8 @@
 // header file that includes main libraries used, configuration variables for sampling and queue handling
 #include "sampling_conf.h"
 
-#define COMMUNICATION_METHOD 0  // 1 for WiFi-MQTT 2 for LoraWan-TTN
-#define LATENCY_TEST 1
+#define COMMUNICATION_METHOD 1  // 1 for WiFi-MQTT 2 for LoraWan-TTN
+#define LATENCY_TEST 0
 #define POWER_MEASURE 1  // Enable power measurement feature
 
 // !! WiFi configuraiton !!
@@ -19,7 +19,7 @@ void send_over_wifi_mqtt(double val);
 // WiFi connection variables
 const char* ssid = "Angelo";
 const char* password = "Pompeo00";
-const char* mqttServer = "192.168.56.34";  //ip address of smartphone
+const char* mqttServer = "192.168.150.60";  //ip address of smartphone
 int port = 1883;
 const char* topic = "angelo/signal";
 char clientId[50];
@@ -71,7 +71,7 @@ void setup() {
   xTaskCreate(sampling_signal_task, "sampling_signal_task", 4096, NULL, 1, NULL); // This task samples the signal using a sliding window
 
   #if COMMUNICATION_METHOD == 1
-  xTaskCreate(wifi_transmission_task, "wifi_transmission_task", 4096, NULL, 1, NULL); // This task is responsible to handle the transmission of the aggregate value over either wifi or lora
+  xTaskCreate(wifi_transmission_task, "wifi_transmission_task", 4096, NULL, 2, NULL); // This task is responsible to handle the transmission of the aggregate value over either wifi or lora
   
    //Connection to MQTT broker
    Serial.println("WiFi connection setup");
@@ -90,7 +90,7 @@ void setup() {
    #endif
   
   #elif COMMUNICATION_METHOD == 2
-  xTaskCreate(lorawan_transmission_task, "lorawan_transmission_task", 4096, NULL, 1, NULL);
+  xTaskCreate(lorawan_transmission_task, "lorawan_transmission_task", 4096, NULL, 2, NULL);
   #endif
   
 
@@ -136,28 +136,8 @@ void sampling_signal_task(void* pvParameters) {
       Serial.println(sample);
       
       if (xQueueSend(transmission_queue, &avgFrequency, 0) != pdPASS) {
-        Serial.println("transmission_queue full — avg frequency dropped");
+        // Serial.println("transmission_queue full — avg frequency dropped");
       }
-
-      #if POWER_MEASURE
-
-      static int powerSampleCount = 0;
-      const int MAX_SAMPLES_BEFORE_SLEEP = 100;  // Tune this as needed
-      const int SLEEP_DURATION_US = 5e6;         // 5 seconds (in microseconds)
-
-      powerSampleCount++;
-
-      if (powerSampleCount >= MAX_SAMPLES_BEFORE_SLEEP) {
-        Serial.println("Entering deep sleep for power measurement...");
-
-        // Configure wake-up timer
-        esp_sleep_enable_timer_wakeup(SLEEP_DURATION_US);
-
-        Serial.flush();  // Ensure all logs are printed before sleeping
-        esp_deep_sleep_start();
-      }
-      
-      #endif
 
       
     }
@@ -197,12 +177,27 @@ void generate_signal_task(void* pvParameters) {
 void wifi_transmission_task(void* pvParameters) {
 
   double avg_freq;
-  char msg[100];
 
   while (1) {
-    if (xQueueReceive(transmission_queue, &avg_freq, pdMS_TO_TICKS(2000))) {
+
+
+    if (xQueueReceive(transmission_queue, &avg_freq, pdMS_TO_TICKS(sampling_period) )) {
 
       send_over_wifi_mqtt(avg_freq);
+
+      #if POWER_MEASURE == 1
+
+      const int SLEEP_DURATION_US = 5e6;         // 5 seconds (in microseconds)
+
+        Serial.println("Entering deep sleep for power measurement...");
+
+        // Configure wake-up timer
+        esp_sleep_enable_timer_wakeup(SLEEP_DURATION_US);
+
+        Serial.flush();  // Ensure all logs are printed before sleeping
+        esp_deep_sleep_start();
+      
+      #endif
 
     }
   }
@@ -213,8 +208,8 @@ void wifi_transmission_task(void* pvParameters) {
 void mqttReconnect() {
   while (!client.connected()) {
     Serial.print("Attempting MQTT connection...");
-    //long r = random(10);
-    sprintf(clientId, "clientId-%ld", 10);
+    long r = random(10);
+    sprintf(clientId, "clientId-%ld", r);
 
     if (client.connect(clientId)) {
       Serial.println(" connected");
@@ -232,10 +227,12 @@ void send_over_wifi_mqtt(double val) {
   const int MSG_BUFFER_SIZE = 100;
   char msg[MSG_BUFFER_SIZE];
 
+
   if (!client.connected()) {
     mqttReconnect();
   }
   client.loop();
+
 
   
 
@@ -250,7 +247,11 @@ void send_over_wifi_mqtt(double val) {
 
   Serial.printf("Publishing message: %.2f to topic %s \n", val, topic);
   
-  client.publish(topic, msg);
+  if (client.publish(topic, msg)) {
+    Serial.println("Publish successful.");
+  } else {
+    Serial.println("Publish failed!");
+  }
 }
 
 #if LATENCY_TEST == 1
@@ -320,6 +321,20 @@ void lorawan_transmission_task(void* pvParameters) {
         txDutyCycleTime = appTxDutyCycle + randr(-APP_TX_DUTYCYCLE_RND, APP_TX_DUTYCYCLE_RND);
         LoRaWAN.cycle(txDutyCycleTime);
         deviceState = DEVICE_STATE_SLEEP;
+
+        #if POWER_MEASURE == 1
+
+        const int SLEEP_DURATION_US = 5e6;         // 5 seconds (in microseconds)
+
+        Serial.println("Entering deep sleep for power measurement...");
+
+        // Configure wake-up timer
+        esp_sleep_enable_timer_wakeup(SLEEP_DURATION_US);
+
+        Serial.flush();  // Ensure all logs are printed before sleeping
+        esp_deep_sleep_start();
+      
+      #endif
         break;
       }
 
