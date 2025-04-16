@@ -124,9 +124,9 @@ For this project, the key tasks that affect the duty cycle are:
 
 1. **Signal Generation Task**: This task runs continuously, updating the sine wave values. Since it uses a delay of 1 ms (`vTaskDelay(pdMS_TO_TICKS(1))`), it's essentially active 100% of the time.
   
-2. **Signal Sampling and Averaging Task**: This task runs with a sampling period of about 67 ms (15 Hz). It processes samples, computes moving averages, and puts the results into a queue. Given that the task is busy for most of this period, it's also active 100% of the time.
+2. **Signal Sampling and Averaging Task**: This task runs a sampling frequeuncy of ~400 Hz after the fft is computed. It processes samples, computes moving averages, and puts the results into a queue. Given that the task is busy for most of this period, it's also active 100% of the time.
 
-3. **Transmission Task**: This task transmits data every 2 seconds. So, it’s only active about 5% of the time, based on the `2000 ms` delay. Transmission can happen over either Wi-Fi or LoRaWAN, but transmission durations are relatively short compared to the time spent idle.
+3. **Transmission Task**: This task transmits data every as soon as it receives it.
 
    - **Wi-Fi transmission** typically draws more power than LoRaWAN due to the nature of Wi-Fi communication.
    - **LoRaWAN transmission**, while still power-hungry, is optimized for low power use and typically consumes less energy per transmission.
@@ -166,13 +166,9 @@ The results of this measurement can be shown in this figure:
 
 ![alt text](src/pic9.png)
 
-The graph illustrates the system’s power profile over time, with marked differences between processing periods and sleep intervals. Average current values during active mode and deep sleep were approximately [X] mA and [Y] mA, respectively.\
+The graph illustrates the system’s power profile over time, with marked differences between processing periods and sleep intervals. Average current values during active mode and deep sleep were approximately 95 mW and  982mW, respectively.\
 We now focus on the values we get during a normal operation where samples are generated, analyzed and finally sent over WiFi.
-Active mode are characterized of a power consumption peak of [K] W, this peak is where we expect to be, at the end of the work cycle when data is transmitted, WiFi is an energy demanding protocols so this is result falls in our estimation.
-These are the values we have registered after the sampling frequency has been optimized, let's see what happens if we use the original maximum frequeuncy: \
-
-![alt text](src/pic10.png)
-
+Active mode is characterized of a power consumption peak of 461mW at startup, 429mW during sampling and  889mW when transmitting over WiFi.
 
 
 

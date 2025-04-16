@@ -181,7 +181,7 @@ void wifi_transmission_task(void* pvParameters) {
   while (1) {
 
 
-    if (xQueueReceive(transmission_queue, &avg_freq, pdMS_TO_TICKS(sampling_period) )) {
+    if (xQueueReceive(transmission_queue, &avg_freq, pdMS_TO_TICKS(1) )) {
 
       send_over_wifi_mqtt(avg_freq);
 
