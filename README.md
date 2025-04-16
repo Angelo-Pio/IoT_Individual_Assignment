@@ -189,6 +189,8 @@ with this in our code setting the macro `TEST_LATENCY` to 1 we turn on the funct
 Round-trip latency: 237 ms
 ```
 
+This is an estimated value that can vary depending on how the connectivity medium environment is set. 
+
 ## LoRaWAN
 
 Testing real world data about LoRaWAN latency is more difficult as it requires a close TTN gateway to get back data from the gateway. Unfortnuately at the time this section of project has been evaluated we did not have such gateway nearby so we provide in this section an estimation of what values we can expect.
