@@ -269,7 +269,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
   // Calculate the round-trip latency (current time - sent timestamp)
   unsigned long latency = millis() - receivedTimestamp;
   Serial.print("Received message with timestamp: ");
-  Serial.println(receivedTimestamp);
+  Serial.println(receivedTimestamp/2);
   Serial.print("Round-trip latency: ");
   Serial.print(latency);
   Serial.println(" ms");

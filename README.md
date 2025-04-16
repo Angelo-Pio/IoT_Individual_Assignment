@@ -177,7 +177,7 @@ Active mode is characterized of a power consumption peak of 461mW at startup, 42
 ## WiFi
 
 We want to compute the time it takes to our system to send data to the MQTT server, in order to do so we need to know the time at which a value has been sent and the time that value was received.  
-In order to implement this we associate a timestamp with each value we send and using bash script we make mosquitto publish all the messages coming in topic angelo/signal to angelo/test.
+In order to implement this we associate a timestamp with each value we send and using bash script we make mosquitto publish all the messages coming in topic angelo/signal to angelo/ack.
 
 ```
 mosquitto_sub -h "192.168.56.34" -t "angelo/signal" | while read line; do mosquitto_pub -h "192.168.56.34" -t "angelo/ack" -m "$line"      
