@@ -160,16 +160,19 @@ We can plot the expected energy consumption over time like so:
 To analyze the energy efficiency of our ESP32-based system, we enabled a power-saving mode through the `POWER_MEASURE` directive. When set to 1, the system enters deep sleep for a fixed period of time after sending data through the choses communication method, this helps us to measure how much power it consumes. \
 This behavior is particularly relevant when the FFT-derived sampling frequency is high, and real-time deep sleep between samples is not feasible. Instead, we opt for periodic sampling followed by power-down phases to demonstrate how the system behaves from the energy consumption POV.
 
-Power consumption was monitored using a secondary ESP32 board paired with an INA219 current sensor. This monitoring board treated the primary ESP32 as its load, allowing us to log voltage and current values throughout the operational cycle, including active and deep sleep states. \
+Power consumption was monitored using a secondary ESP32 board paired with an INA219 current sensor. This second monitoring board treated the primary ESP32 as its load, allowing us to log voltage and current values throughout the operational cycle, including active and deep sleep states. \
 The collected data clearly shows a significant drop in current draw when the system enters deep sleep, validating the effectiveness of our approach.\
 The results of this measurement can be shown in this figure:
 
+
 ![alt text](src/pic9.png)
 
-The graph illustrates the system’s power profile over time, with marked differences between processing periods and sleep intervals. Average current values during active mode and deep sleep were approximately 95 mW and  982mW, respectively.\
-We now focus on the values we get during a normal operation where samples are generated, analyzed and finally sent over WiFi.
-Active mode is characterized of a power consumption peak of 461mW at startup, 429mW during sampling and  889mW when transmitting over WiFi.
+The graph illustrates the system’s power profile over time, with marked differences between processing periods and sleep intervals. \
+The first peak shown in the graph corresponds to the device boot up, the value measured here is 451mW.
+The second major peak corresponds to to the time period in which the system uses a sampling frequeuncy of 22Khz and then immediately computes the fft that lowers this frequeuncy at ~400Hz.
+Average current value during sleep mode is 95 mW and for active mode is 415mW, with several peaks of 700mW corresponding to wifi connection set up, mqtt connection and final transmission that corresponding to which we registered around 984mW.\
 
+These values diverge from our initial power consumption estimation.
 
 
 # Latency
